@@ -5,39 +5,28 @@
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   
   <script>
-    // We create a custom Component that manages the single machine
+    // Il nostro componente personalizzato (rimane identico a prima)
     AFRAME.registerComponent('diagnostic-tracker', {
-      schema: { 
-        deviceId: {type: 'string'} // Receives the machine ID (e.g., "machine_1")
-      },
-      
+      schema: { deviceId: {type: 'string'} },
       init: function () {
         this.interval = null;
-
-        // When the camera finds THIS marker...
         this.el.addEventListener('markerFound', () => {
-          console.log("Marker found! ID:", this.data.deviceId);
-          this.fetchData(); // Fetch the data immediately
-          this.interval = setInterval(() => this.fetchData(), 3000); // And then every 3 seconds
+          this.fetchData(); 
+          this.interval = setInterval(() => this.fetchData(), 3000);
         });
-
-        // When the camera loses tracking of the marker...
         this.el.addEventListener('markerLost', () => {
-          console.log("Marker lost! ID:", this.data.deviceId);
-          clearInterval(this.interval); // Stop making useless API calls to save battery
+          clearInterval(this.interval);
         });
       },
-
       fetchData: async function () {
         try {
           const urlAPI = '/api/diagnostics/' + this.data.deviceId;
           const answer = await fetch(urlAPI);
           const data = await answer.json();
 
-          // Use CLASSES (.battery-text) instead of IDs, since there are multiple identical panels now!
           this.el.querySelector('.battery-text').setAttribute('value', 'Battery: ' + data.battery + '%');
-          this.el.querySelector('.status-text').setAttribute('value', 'State: ' + data.state);
-          this.el.querySelector('.temp-text').setAttribute('value', 'Temperature: ' + data.temperature + ' C');
+          this.el.querySelector('.status-text').setAttribute('value', 'Last connection: ' + data.last_connection);
+          this.el.querySelector('.temp-text').setAttribute('value', 'Signal: ' + data.signal_level);
         } catch (error) {
           console.error("API Error:", error);
         }
@@ -48,26 +37,37 @@
 <body style="margin : 0px; overflow: hidden;">
 
   <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;">
-    <a-marker type="barcode" value="0" diagnostic-tracker="deviceId: machine_0">
-      <a-plane scale="0.5 0.5 0.5" position="0 0.5 0" rotation="-90 0 0" width="2.5" height="1.5" color="#2c3e50" opacity="0.8">
-        <a-text value="--- MACHINE 0 ---" position="-1.1 0.5 0.01" color="#f1c40f" scale="0.4 0.4 0.4"></a-text>
-        <a-text class="battery-text" value="Battery: loading..." position="-1.1 0.1 0.01" color="#2ecc71" scale="0.5 0.5 0.5"></a-text>
-        <a-text class="status-text" value="State: loading..." position="-1.1 -0.2 0.01" color="#ffffff" scale="0.5 0.5 0.5"></a-text>
-        <a-text class="temp-text" value="Temperature: loading..." position="-1.1 -0.5 0.01" color="#e74c3c" scale="0.5 0.5 0.5"></a-text>
-      </a-plane>
-    </a-marker>
-
-    <a-marker type="barcode" value="1" diagnostic-tracker="deviceId: machine_1">
-      <a-plane scale="0.5 0.5 0.5" position="0 0.5 0" rotation="-90 0 0" width="2.5" height="1.5" color="#2c3e50" opacity="0.8">
-        <a-text value="--- MACHINE 1 ---" position="-1.1 0.5 0.01" color="#f1c40f" scale="0.4 0.4 0.4"></a-text>
-        <a-text class="battery-text" value="Battery: loading..." position="-1.1 0.1 0.01" color="#2ecc71" scale="0.5 0.5 0.5"></a-text>
-        <a-text class="status-text" value="State: loading..." position="-1.1 -0.2 0.01" color="#ffffff" scale="0.5 0.5 0.5"></a-text>
-        <a-text class="temp-text" value="Temperature: loading..." position="-1.1 -0.5 0.01" color="#e74c3c" scale="0.5 0.5 0.5"></a-text>
-      </a-plane>
-    </a-marker>
-
+    
     <a-entity camera></a-entity>
+    
   </a-scene>
+
+  <script>
+    // Aspettiamo che la pagina sia caricata
+    document.addEventListener("DOMContentLoaded", () => {
+      const scene = document.querySelector('a-scene');
+      const numberOfMachines = 64; // Puoi mettere 64, 100, o qualsiasi numero serva!
+
+      // Ciclo che gira 'numberOfMachines' volte
+      for (let i = 0; i < numberOfMachines; i++) {
+        
+        // Creiamo il blocco HTML per il singolo marker, usando `i` in modo dinamico
+        const markerHTML = `
+          <a-marker type="barcode" value="${i}" diagnostic-tracker="deviceId: machine_${i}">
+            <a-plane scale="0.5 0.5 0.5" position="0 0.5 0" rotation="-90 0 0" width="2.5" height="1.5" color="#2c3e50" opacity="0.8">
+              <a-text value="--- MACHINE ${i} ---" position="-1.1 0.5 0.01" color="#f1c40f" scale="0.4 0.4 0.4"></a-text>
+              <a-text class="battery-text" value="Battery: loading..." position="-1.1 0.1 0.01" color="#2ecc71" scale="0.5 0.5 0.5"></a-text>
+              <a-text class="status-text" value="State: loading..." position="-1.1 -0.2 0.01" color="#ffffff" scale="0.5 0.5 0.5"></a-text>
+              <a-text class="temp-text" value="Temperature: loading..." position="-1.1 -0.5 0.01" color="#e74c3c" scale="0.5 0.5 0.5"></a-text>
+            </a-plane>
+          </a-marker>
+        `;
+        
+        // Iniettiamo il blocco appena creato dentro la scena 3D
+        scene.insertAdjacentHTML('afterbegin', markerHTML);
+      }
+    });
+  </script>
 
 </body>
 </html>

@@ -76,7 +76,7 @@ def update_sensor_data(device_id):
     return jsonify({"status": "success", "message": f"Data updated for {device_id}"}), 200
 
 # ==========================================
-# ENDPOINT PER STAMPARE LE ETICHETTE
+# ENDPOINT TO PRINT THE BARCODES
 # ==========================================
 @app.route('/stampa/<int:marker_id>')
 def stampa_etichetta(marker_id):
@@ -97,12 +97,12 @@ def stampa_etichetta(marker_id):
         </style>
     </head>
     <body>
-        <h2>Etichetta AR per Macchina ID: {marker_id}</h2>
-        <p>Stampa questo foglio e incollalo sul macchinario.</p>
+        <h2>AR label for Machine ID: {marker_id}</h2>
+        <p>Print and stick this barcode on the device.</p>
         
         <img src="{github_url}" alt="Barcode {marker_id}">
         <br>
-        <button onclick="window.print()">Stampa Etichetta</button>
+        <button onclick="window.print()">Print label</button>
     </body>
     </html>
     """

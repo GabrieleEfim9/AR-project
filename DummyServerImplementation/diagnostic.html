@@ -5,28 +5,49 @@
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   
   <script>
-    // Il nostro componente personalizzato (rimane identico a prima)
-    AFRAME.registerComponent('diagnostic-tracker', {
-      schema: { deviceId: {type: 'string'} },
+    // Component that intercepts barcode reading
+    AFRAME.registerComponent('dynamic-reader', {
       init: function () {
+        // Find the ONLY 3D panel we have in the scene
+        const uiPanel = document.getElementById('master-panel');
         this.interval = null;
+
+        // Event listener for when marker is found
         this.el.addEventListener('markerFound', () => {
-          this.fetchData(); 
-          this.interval = setInterval(() => this.fetchData(), 3000);
+          // 1. DYNAMIC READING: The phone extracts the number physically read!
+          const barcodeValue = this.el.getAttribute('value');
+          console.log("Physical barcode decoded! Value:", barcodeValue);
+
+          // 2. Move the 3D panel inside this marker to anchor it to reality
+          this.el.appendChild(uiPanel);
+          uiPanel.setAttribute('visible', 'true'); // Make it visible
+          
+          // 3. Update the title with the number just read
+          document.querySelector('#title-text').setAttribute('value', '--- MACHINE ' + barcodeValue + ' ---');
+
+          // 4. Start the request to the server with the dynamic number
+          this.fetchData(barcodeValue);
+          this.interval = setInterval(() => this.fetchData(barcodeValue), 3000);
         });
+
+        // Event listener for when marker is lost
         this.el.addEventListener('markerLost', () => {
+          uiPanel.setAttribute('visible', 'false'); // Hide the panel
           clearInterval(this.interval);
         });
       },
-      fetchData: async function () {
+
+      // Function to fetch data from the server
+      fetchData: async function (barcodeValue) {
         try {
-          const urlAPI = '/api/diagnostics/' + this.data.deviceId;
+          const urlAPI = '/api/diagnostics/machine_' + barcodeValue;
           const answer = await fetch(urlAPI);
           const data = await answer.json();
 
-          this.el.querySelector('.battery-text').setAttribute('value', 'Battery: ' + data.battery + '%');
-          this.el.querySelector('.status-text').setAttribute('value', 'Last connection: ' + data.last_connection);
-          this.el.querySelector('.temp-text').setAttribute('value', 'Signal: ' + data.signal_level);
+          // Update UI elements with fetched data
+          document.querySelector('#battery-text').setAttribute('value', 'Battery: ' + data.battery + '%');
+          document.querySelector('#status-text').setAttribute('value', 'Last conn: ' + data.last_connection);
+          document.querySelector('#temp-text').setAttribute('value', 'Signal: ' + data.signal_level);
         } catch (error) {
           console.error("API Error:", error);
         }
@@ -36,35 +57,29 @@
 </head>
 <body style="margin : 0px; overflow: hidden;">
 
-  <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;">
+  <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 4x4_bch_13_9_3;">
     
+    <a-entity id="master-panel" visible="false">
+      <a-plane scale="0.5 0.5 0.5" position="0 0.5 0" rotation="-90 0 0" width="2.5" height="1.5" color="#2c3e50" opacity="0.8">
+        <a-text id="title-text" value="--- MACHINE ---" position="-1.1 0.5 0.01" color="#f1c40f" scale="0.4 0.4 0.4"></a-text>
+        <a-text id="battery-text" value="Battery: loading..." position="-1.1 0.1 0.01" color="#2ecc71" scale="0.5 0.5 0.5"></a-text>
+        <a-text id="status-text" value="State: loading..." position="-1.1 -0.2 0.01" color="#ffffff" scale="0.5 0.5 0.5"></a-text>
+        <a-text id="temp-text" value="Temperature: loading..." position="-1.1 -0.5 0.01" color="#e74c3c" scale="0.5 0.5 0.5"></a-text>
+      </a-plane>
+    </a-entity>
+
     <a-entity camera></a-entity>
-    
   </a-scene>
 
   <script>
-    // Aspettiamo che la pagina sia caricata
     document.addEventListener("DOMContentLoaded", () => {
       const scene = document.querySelector('a-scene');
-      const numberOfMachines = 64; // Puoi mettere 64, 100, o qualsiasi numero serva!
-
-      // Ciclo che gira 'numberOfMachines' volte
-      for (let i = 0; i < numberOfMachines; i++) {
-        
-        // Creiamo il blocco HTML per il singolo marker, usando `i` in modo dinamico
-        const markerHTML = `
-          <a-marker type="barcode" value="${i}" diagnostic-tracker="deviceId: machine_${i}">
-            <a-plane scale="0.5 0.5 0.5" position="0 0.5 0" rotation="-90 0 0" width="2.5" height="1.5" color="#2c3e50" opacity="0.8">
-              <a-text value="--- MACHINE ${i} ---" position="-1.1 0.5 0.01" color="#f1c40f" scale="0.4 0.4 0.4"></a-text>
-              <a-text class="battery-text" value="Battery: loading..." position="-1.1 0.1 0.01" color="#2ecc71" scale="0.5 0.5 0.5"></a-text>
-              <a-text class="status-text" value="State: loading..." position="-1.1 -0.2 0.01" color="#ffffff" scale="0.5 0.5 0.5"></a-text>
-              <a-text class="temp-text" value="Temperature: loading..." position="-1.1 -0.5 0.01" color="#e74c3c" scale="0.5 0.5 0.5"></a-text>
-            </a-plane>
-          </a-marker>
-        `;
-        
-        // Iniettiamo il blocco appena creato dentro la scena 3D
-        scene.insertAdjacentHTML('afterbegin', markerHTML);
+      
+      // Creiamo 100 ganci invisibili. Servono solo alla telecamera per le coordinate spaziali.
+      // Non contengono più nessuna grafica!
+      for (let i = 0; i < 100; i++) {
+        const trackerHTML = `<a-marker type="barcode" value="${i}" dynamic-reader></a-marker>`;
+        scene.insertAdjacentHTML('afterbegin', trackerHTML);
       }
     });
   </script>

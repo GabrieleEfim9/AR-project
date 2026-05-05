@@ -78,7 +78,7 @@ def update_sensor_data(device_id):
 # ==========================================
 # ENDPOINT TO PRINT THE BARCODES
 # ==========================================
-@app.route('/stampa/<int:marker_id>')
+@app.route('/print_marker/<int:marker_id>')
 def stampa_etichetta(marker_id):
     # Building direct link to the image of the barcode needed
     github_url = f"https://raw.githubusercontent.com/nicolocarpignoli/artoolkit-barcode-markers-collection/master/4x4_bch_13_9_3/{marker_id}.png"
@@ -88,21 +88,47 @@ def stampa_etichetta(marker_id):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Stampa Marker {marker_id}</title>
+        <title>Marker {marker_id}</title>
         <style>
-            body {{ text-align: center; font-family: Arial, sans-serif; margin-top: 50px; }}
-            img {{ width: 300px; height: 300px; border: 2px solid black; }}
-            button {{ margin-top: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer; }}
-            @media print {{ button {{ display: none; }} }} /* Nasconde il bottone quando si stampa */
+            /* Stili per la visualizzazione su SCHERMO */
+            body {{ text-align: center; font-family: Arial, sans-serif; margin-top: 50px; background-color: #f4f4f9; }}
+            .card {{ background: white; display: inline-block; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
+            img {{ width: 300px; height: 300px; }} /* ASSOLUTAMENTE NESSUN BORDO CSS QUI */
+            button {{ margin-top: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer; background-color: #2980b9; color: white; border: none; border-radius: 5px; }}
+            
+            /* Stili ESCLUSIVI per la STAMPANTE */
+            @media print {{
+                @page {{ margin: 0; }} /* Rimuove url, data e numero pagina dai bordi del foglio */
+                body {{ 
+                    margin: 0; 
+                    background-color: white; 
+                    display: flex; 
+                    justify-content: center; 
+                    align-items: center; 
+                    height: 100vh; /* Centra l'immagine a metà del foglio A4 */
+                }}
+                .no-print {{ display: none !important; }} /* Nasconde testi e bottoni sul foglio di carta */
+                .card {{ box-shadow: none; padding: 0; }}
+            }}
         </style>
     </head>
     <body>
-        <h2>AR label for Machine ID: {marker_id}</h2>
-        <p>Print and stick this barcode on the device.</p>
-        
-        <img src="{github_url}" alt="Barcode {marker_id}">
-        <br>
-        <button onclick="window.print()">Print label</button>
+        <div class="card">
+            <!-- Questa sezione sparirà quando si stampa -->
+            <div class="no-print">
+                <h2>AR label for Machine ID: {marker_id}</h2>
+                <p>Print this marker. Ensure there are no reflections on the paper.</p>
+            </div>
+            
+            <!-- Solo questa immagine finirà sul foglio di carta -->
+            <img src="{github_url}" alt="Barcode {marker_id}">
+            
+            <!-- Anche il bottone sparirà -->
+            <div class="no-print">
+                <br>
+                <button onclick="window.print()">Print label</button>
+            </div>
+        </div>
     </body>
     </html>
     """
@@ -120,4 +146,4 @@ def serve_files(filename):
     return send_from_directory(os.getcwd(), filename)
 
 if __name__ == '__main__':
-    app.run(port=8080)
+    app.run(host='0.0.0.0', port=8080)

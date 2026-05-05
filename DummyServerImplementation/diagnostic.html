@@ -1,62 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <!-- Downgrade alla 1.3.0 per massima stabilità su mobile -->
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   
   <script>
-    // Custom component to handle dynamic marker reading and API fetching
-    AFRAME.registerComponent('dynamic-reader', {
+    AFRAME.registerComponent('diagnostic-tracker', {
+      schema: { deviceId: {type: 'string'} },
       init: function () {
-        // Find the single Master UI Panel in the scene
-        const uiPanel = document.getElementById('master-panel');
         this.interval = null;
-        this.hideTimeout = null; // Timer for the anti-flickering debounce
-
-        // When the camera detects a marker
+        
+        // Quando inquadri il marker, fa partire la richiesta al server Python
         this.el.addEventListener('markerFound', () => {
-          // 1. Immediately cancel the hide countdown to prevent flickering
-          clearTimeout(this.hideTimeout); 
-
-          // 2. Extract the physical number decoded by the camera
-          const barcodeValue = this.el.getAttribute('value');
-          console.log("Physical barcode decoded! Value:", barcodeValue);
-
-          // 3. Teleport the 3D panel to this marker to anchor it to reality
-          this.el.appendChild(uiPanel);
-          uiPanel.setAttribute('visible', 'true');
-          
-          // 4. Update the title with the decoded number
-          document.querySelector('#title-text').setAttribute('value', '--- MACHINE ' + barcodeValue + ' ---');
-
-          // 5. Start fetching data from the server (prevent overlapping intervals)
-          if (!this.interval) {
-            this.fetchData(barcodeValue);
-            this.interval = setInterval(() => this.fetchData(barcodeValue), 3000);
-          }
+          this.fetchData(); 
+          this.interval = setInterval(() => this.fetchData(), 3000);
         });
-
-        // When the camera loses tracking of the marker
+        
+        // Quando perdi il marker, ferma le richieste
         this.el.addEventListener('markerLost', () => {
-          // Instead of hiding immediately, wait 500ms (Debounce)
-          this.hideTimeout = setTimeout(() => {
-            uiPanel.setAttribute('visible', 'false');
-            clearInterval(this.interval);
-            this.interval = null;
-          }, 500); 
+          clearInterval(this.interval);
         });
       },
-
-      fetchData: async function (barcodeValue) {
+      fetchData: async function () {
         try {
-          const urlAPI = '/api/diagnostics/machine_' + barcodeValue;
+          const urlAPI = '/api/diagnostics/' + this.data.deviceId;
           const answer = await fetch(urlAPI);
           const data = await answer.json();
 
-          // Update the 3D text entities with the JSON payload
-          document.querySelector('#battery-text').setAttribute('value', 'Battery: ' + data.battery + '%');
-          document.querySelector('#connection-text').setAttribute('value', 'Last Conn: ' + data.last_connection);
-          document.querySelector('#signal-text').setAttribute('value', 'Signal: ' + data.signal_level);
+          // Inserisce i dati veri dal JSON dentro ai testi del pannello
+          this.el.querySelector('.battery-text').setAttribute('value', 'Battery: ' + data.battery + '%');
+          this.el.querySelector('.status-text').setAttribute('value', 'Last connection: ' + data.last_connection);
+          this.el.querySelector('.temp-text').setAttribute('value', 'Signal: ' + data.signal_level);
         } catch (error) {
           console.error("API Error:", error);
         }
@@ -66,39 +41,35 @@
 </head>
 <body style="margin : 0px; overflow: hidden;">
 
-  <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 4x4_bch_13_9_3;">
-    
-    <a-entity id="master-panel" visible="false">
-      <a-plane scale="0.5 0.5 0.5" position="0 0.5 0" rotation="-90 0 0" width="2.5" height="1.5" color="#2c3e50" opacity="0.8">
-        <a-text id="title-text" value="--- MACHINE ---" position="-1.1 0.5 0.01" color="#f1c40f" scale="0.4 0.4 0.4"></a-text>
-        <a-text id="battery-text" value="Battery: loading..." position="-1.1 0.1 0.01" color="#2ecc71" scale="0.5 0.5 0.5"></a-text>
-        <a-text id="connection-text" value="Last Conn: loading..." position="-1.1 -0.2 0.01" color="#ffffff" scale="0.5 0.5 0.5"></a-text>
-        <a-text id="signal-text" value="Signal: loading..." position="-1.1 -0.5 0.01" color="#e74c3c" scale="0.5 0.5 0.5"></a-text>
-      </a-plane>
-    </a-entity>
-
+  <a-scene embedded 
+      arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 4x4_BCH_13_9_3;"
+      vr-mode-ui="enabled: false">
     <a-entity camera></a-entity>
   </a-scene>
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const scene = document.querySelector('a-scene');
-      
-      // Generate 100 invisible hooks to save RAM. 
-      // They include smoothing parameters to reduce 3D jittering.
-      for (let i = 0; i < 100; i++) {
-        const trackerHTML = `
-          <a-marker 
-            type="barcode" 
-            value="${i}" 
-            dynamic-reader 
-            smooth="true" 
-            smoothCount="10" 
-            smoothTolerance="0.01" 
-            smoothThreshold="5">
+      const numberOfMachines = 100; 
+
+      for (let i = 0; i < numberOfMachines; i++) {
+        const markerHTML = `
+          <a-marker type="barcode" value="${i}" diagnostic-tracker="deviceId: machine_${i}"
+                    smooth="true" smoothCount="5" smoothTolerance="0.05" smoothThreshold="2">
+            
+            <a-plane scale="0.5 0.5 0.5" position="0 0.5 0" rotation="-90 0 0" width="2.5" height="1.5" color="#2c3e50" opacity="0.8">
+              
+              <!-- RISOLTO LO SGRETOLAMENTO: Z spostato a 0.1 e aggiunto alpha-test="0.5" -->
+              <a-text value="--- MACHINE ${i} ---" position="-1.1 0.5 0.1" color="#f1c40f" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
+              <a-text class="battery-text" value="Battery: loading..." position="-1.1 0.1 0.1" color="#2ecc71" scale="0.5 0.5 0.5" alpha-test="0.5"></a-text>
+              <a-text class="status-text" value="State: loading..." position="-1.1 -0.2 0.1" color="#ffffff" scale="0.5 0.5 0.5" alpha-test="0.5"></a-text>
+              <a-text class="temp-text" value="Signal: loading..." position="-1.1 -0.5 0.1" color="#e74c3c" scale="0.5 0.5 0.5" alpha-test="0.5"></a-text>
+              
+            </a-plane>
+            
           </a-marker>
         `;
-        scene.insertAdjacentHTML('afterbegin', trackerHTML);
+        scene.insertAdjacentHTML('afterbegin', markerHTML);
       }
     });
   </script>

@@ -1,65 +1,121 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!-- Downgrade alla 1.3.0 per massima stabilità su mobile -->
+  <!-- ========================================== -->
+  <!-- 1. IMPORT CORE LIBRARIES                   -->
+  <!-- ========================================== -->
+  
+  <!-- A-Frame: The core 3D web framework. We use version 1.3.0 because it's the most stable Long Term Support (LTS) version for mobile AR. -->
   <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  
+  <!-- AR.js: The Augmented Reality engine that uses the webcam to find markers and calculate 3D space. -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   
+  <!-- ========================================== -->
+  <!-- 2. CUSTOM A-FRAME COMPONENT LOGIC          -->
+  <!-- ========================================== -->
   <script>
+    // We register a custom logic component named 'diagnostic-tracker' that we will attach to our 3D markers.
     AFRAME.registerComponent('diagnostic-tracker', {
+      
+      // 'schema' defines the properties this component accepts. Here it expects a 'deviceId' (e.g., "machine_78").
       schema: { deviceId: {type: 'string'} },
+      
+      // 'init' runs exactly once when the marker is created in the scene.
       init: function () {
-        this.interval = null;
+        this.interval = null; // Variable to store our repeating timer
         
-        // Quando inquadri il marker, fa partire la richiesta al server Python
+        // EVENT: What happens when the camera SEES the marker
         this.el.addEventListener('markerFound', () => {
+          // Immediately fetch the data once so there is no delay...
           this.fetchData(); 
+          // ...then set up a loop to fetch fresh data every 3000 milliseconds (3 seconds).
           this.interval = setInterval(() => this.fetchData(), 3000);
         });
         
-        // Quando perdi il marker, ferma le richieste
+        // EVENT: What happens when the camera LOSES the marker (e.g., phone moves away)
         this.el.addEventListener('markerLost', () => {
+          // Stop the 3-second loop to save phone battery and reduce server load.
           clearInterval(this.interval);
         });
       },
+      
+      // 'fetchData' handles the communication with your Python server
       fetchData: async function () {
         try {
+          // Build the exact URL for this specific machine (e.g., '/api/diagnostics/machine_78')
           const urlAPI = '/api/diagnostics/' + this.data.deviceId;
+          
+          // Wait for the Python server to answer
           const answer = await fetch(urlAPI);
+          
+          // Convert the server's text answer into a readable JSON object
           const data = await answer.json();
 
-          // Inserisce i dati veri dal JSON dentro ai testi del pannello
+          // Select the 3D text elements inside this specific marker and update their 'value' with the real data.
           this.el.querySelector('.battery-text').setAttribute('value', 'Battery: ' + data.battery + '%');
           this.el.querySelector('.status-text').setAttribute('value', 'Last connection: ' + data.last_connection);
           this.el.querySelector('.temp-text').setAttribute('value', 'Signal: ' + data.signal_level);
         } catch (error) {
+          // If the server is down or the network fails, print the error in the browser console.
           console.error("API Error:", error);
         }
       }
     });
   </script>
 </head>
+
+<!-- Body margin set to 0 and overflow hidden to ensure the webcam feed takes up the full screen without scrollbars -->
 <body style="margin : 0px; overflow: hidden;">
 
+  <!-- ========================================== -->
+  <!-- 3. THE 3D SCENE & AR ENGINE SETTINGS       -->
+  <!-- ========================================== -->
+  
+  <!-- <a-scene> is the container for everything 3D. 
+       - embedded: Integrates the 3D canvas smoothly into the HTML page.
+       - arjs: Configures the AR engine (uses webcam, hides debug info, looks for mono/matrix barcodes, uses the specific 4x4 BCH dictionary).
+       - vr-mode-ui="enabled: false": Hides the "Enter VR" button to prevent users from breaking the AR camera feed. -->
   <a-scene embedded 
       arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 4x4_BCH_13_9_3;"
       vr-mode-ui="enabled: false">
+    
+    <!-- The virtual camera that acts as the user's eyes -->
     <a-entity camera></a-entity>
+    
   </a-scene>
 
+  <!-- ========================================== -->
+  <!-- 4. DYNAMIC MARKER GENERATION SCRIPT        -->
+  <!-- ========================================== -->
   <script>
+    // Wait until the entire webpage HTML has finished loading before running this code
     document.addEventListener("DOMContentLoaded", () => {
+      
+      // Find the <a-scene> tag we defined above so we can inject things into it
       const scene = document.querySelector('a-scene');
+      
+      // Define how many virtual machines/markers we want to support
       const numberOfMachines = 100; 
 
+      // Loop from 0 to 99 to create 100 separate markers
       for (let i = 0; i < numberOfMachines; i++) {
+        
+        // Build a large chunk of HTML text for a single marker, injecting the current number (i) where needed.
         const markerHTML = `
+          <!-- The Marker: 
+               - value="\${i}": The physical barcode number to look for.
+               - diagnostic-tracker: Attaches our custom script, passing the current machine ID.
+               - smooth parameters: Filters out human hand-shake so the hologram doesn't jitter. -->
           <a-marker type="barcode" value="${i}" diagnostic-tracker="deviceId: machine_${i}"
                     smooth="true" smoothCount="5" smoothTolerance="0.05" smoothThreshold="2">
             
+            <!-- The Background Panel: A semi-transparent dark-blue rectangle placed flat (rotation -90) -->
             <a-plane scale="0.5 0.5 0.5" position="0 0.5 0" rotation="-90 0 0" width="2.5" height="1.5" color="#2c3e50" opacity="0.8">
               
-              <!-- RISOLTO LO SGRETOLAMENTO: Z spostato a 0.1 e aggiunto alpha-test="0.5" -->
+              <!-- The Texts: 
+                   - position Z is set to 0.1 (pushed slightly forward) to prevent z-fighting with the background panel.
+                   - alpha-test="0.5": Forces the graphics card to render the text edges solidly, preventing them from crumbling/flickering against the transparent background. -->
               <a-text value="--- MACHINE ${i} ---" position="-1.1 0.5 0.1" color="#f1c40f" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
               <a-text class="battery-text" value="Battery: loading..." position="-1.1 0.1 0.1" color="#2ecc71" scale="0.5 0.5 0.5" alpha-test="0.5"></a-text>
               <a-text class="status-text" value="State: loading..." position="-1.1 -0.2 0.1" color="#ffffff" scale="0.5 0.5 0.5" alpha-test="0.5"></a-text>
@@ -69,6 +125,8 @@
             
           </a-marker>
         `;
+        
+        // Insert the freshly built HTML chunk directly inside the <a-scene>
         scene.insertAdjacentHTML('afterbegin', markerHTML);
       }
     });

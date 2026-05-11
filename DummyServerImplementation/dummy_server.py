@@ -1,149 +1,140 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
+import asyncio
+import threading
+import json
 from datetime import datetime
-import os
+from flask import Flask, jsonify, render_template, send_from_directory
+from bleak import BleakClient, BleakScanner
 
-app = Flask(__name__)
-CORS(app)
+CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-# ==========================================
-# 1. STATIC DATABASE (Fallback)
-# ==========================================
-# This data is used if the Arduino has not sent anything yet.
-STATIC_DB = {
-    "machine_0": {
-        "battery": 100,
-        "last_connection": "2026-04-15 08:30:00",
-        "signal_level": "-50 dBm (Excellent)"
-    },
-    "machine_1": {
-        "battery": 15,
-        "last_connection": "2026-04-14 18:45:00",
-        "signal_level": "-85 dBm (Weak)"
-    }
-}
-
-# ==========================================
-# 2. REAL-TIME IN-MEMORY DATABASE
-# ==========================================
-# This will store actual data sent by the hardware.
+# Global database to store real-time data for all connected machines
 REAL_TIME_DB = {}
+# Dictionary to track active clients and prevent duplicate connections
+active_clients = {}
 
-# ==========================================
-# AUGMENTED REALITY ENDPOINT (GET)
-# ==========================================
-@app.route('/api/diagnostics/<device_id>', methods=['GET'])
-def get_diagnostics(device_id):
-    # Check 1: Has the Arduino sent recent real data?
-    if device_id in REAL_TIME_DB:
-        data = REAL_TIME_DB[device_id].copy()
-        data["data_source"] = "Real Sensor"
-        return jsonify(data)
-    
-    # Check 2: No real data available. Is there a prepared static data entry?
-    if device_id in STATIC_DB:
-        data = STATIC_DB[device_id].copy()
-        data["data_source"] = "Static Data"
-        return jsonify(data)
-    
-    # Check 3: If the scanned ID does not exist anywhere,
-    # return neutral data so the app never fails.
-    return jsonify({
-        "battery": 0,
-        "last_connection": "Never connected",
-        "signal_level": "No signal",
-        "data_source": "Neutral Data"
-    })
+app = Flask(__name__, static_folder='.', template_folder='.')
 
-# ==========================================
-# ARDUINO ENDPOINT (POST) - IoT READY
-# ==========================================
-@app.route('/api/sensors/<device_id>', methods=['POST'])
-def update_sensor_data(device_id):
-    # The Arduino will POST JSON data to this address.
-    incoming_data = request.get_json()
-    
-    if not incoming_data:
-        return jsonify({"error": "No data received"}), 400
-    
-    # Save the Arduino data into the real-time database.
-    REAL_TIME_DB[device_id] = {
-        "battery": incoming_data.get("battery", 0),
-        "last_connection": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "signal_level": incoming_data.get("signal_level", "Unknown")
-    }
-    
-    return jsonify({"status": "success", "message": f"Data updated for {device_id}"}), 200
-
-# ==========================================
-# ENDPOINT TO PRINT THE BARCODES
-# ==========================================
-@app.route('/print_marker/<int:marker_id>')
-def stampa_etichetta(marker_id):
-    # Building direct link to the image of the barcode needed
-    github_url = f"https://raw.githubusercontent.com/nicolocarpignoli/artoolkit-barcode-markers-collection/master/4x4_bch_13_9_3/{marker_id}.png"
-    
-    # Showing the image through html script
-    html_page = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Marker {marker_id}</title>
-        <style>
-            /* Stili per la visualizzazione su SCHERMO */
-            body {{ text-align: center; font-family: Arial, sans-serif; margin-top: 50px; background-color: #f4f4f9; }}
-            .card {{ background: white; display: inline-block; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
-            img {{ width: 300px; height: 300px; }} /* ASSOLUTAMENTE NESSUN BORDO CSS QUI */
-            button {{ margin-top: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer; background-color: #2980b9; color: white; border: none; border-radius: 5px; }}
+def make_notification_handler(machine_id):
+    """Creates a specific BLE notification handler for a given machine."""
+    def handler(sender, data):
+        try:
+            # Decode the incoming JSON payload from the ESP32
+            payload = json.loads(data.decode('utf-8'))
             
-            /* Stili ESCLUSIVI per la STAMPANTE */
-            @media print {{
-                @page {{ margin: 0; }} /* Rimuove url, data e numero pagina dai bordi del foglio */
-                body {{ 
-                    margin: 0; 
-                    background-color: white; 
-                    display: flex; 
-                    justify-content: center; 
-                    align-items: center; 
-                    height: 100vh; /* Centra l'immagine a metà del foglio A4 */
-                }}
-                .no-print {{ display: none !important; }} /* Nasconde testi e bottoni sul foglio di carta */
-                .card {{ box-shadow: none; padding: 0; }}
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <!-- Questa sezione sparirà quando si stampa -->
-            <div class="no-print">
-                <h2>AR label for Machine ID: {marker_id}</h2>
-                <p>Print this marker. Ensure there are no reflections on the paper.</p>
-            </div>
+            if machine_id in REAL_TIME_DB:
+                REAL_TIME_DB[machine_id].update({
+                    "core_temperature": str(payload.get("temp", 0)),
+                    "last_connection": datetime.now().strftime("%H:%M:%S")
+                })
+                
+            print(f"[BLE] {machine_id} -> Temp: {payload.get('temp')} °C")
+        except Exception as e:
+            print(f"[BLE] Error decoding data from {machine_id}: {e}")
             
-            <!-- Solo questa immagine finirà sul foglio di carta -->
-            <img src="{github_url}" alt="Barcode {marker_id}">
+    return handler
+
+async def manage_device(device, rssi):
+    """Manages the persistent BLE connection to a single machine."""
+    machine_id = device.name.lower()
+    
+    if machine_id in active_clients:
+        return # Device is already being managed
+
+    print(f"[BLE] Connecting to {machine_id}...")
+    active_clients[machine_id] = True
+    
+    # Initialize database entry if this is a new machine
+    if machine_id not in REAL_TIME_DB:
+        REAL_TIME_DB[machine_id] = {
+            "core_temperature": "0", 
+            "signal_level": "0", 
+            "last_connection": "Never"
+        }
+
+    # Store the RSSI value measured during the initial scan
+    REAL_TIME_DB[machine_id]["signal_level"] = f"{rssi} dBm"
+
+    try:
+        async with BleakClient(device) as client:
+            # Subscribe to the Bluetooth characteristic
+            await client.start_notify(CHARACTERISTIC_UUID, make_notification_handler(machine_id))
             
-            <!-- Anche il bottone sparirà -->
-            <div class="no-print">
-                <br>
-                <button onclick="window.print()">Print label</button>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    return html_page
+            # Keep the async task alive as long as the device remains connected
+            while client.is_connected:
+                await asyncio.sleep(5)
+                
+    except Exception as e:
+        print(f"[BLE] Lost connection to {machine_id}: {e}")
+        
+    finally:
+        # Cleanup when the device disconnects
+        if machine_id in active_clients:
+            del active_clients[machine_id]
+        REAL_TIME_DB[machine_id]["signal_level"] = "No signal"
+
+async def scan_loop():
+    """Continuously scans the air and launches management tasks for each new machine found."""
+    while True:
+        print("[BLE] Scanning for machines...")
+        # Use return_adv=True to capture the RSSI signal strength
+        devices = await BleakScanner.discover(timeout=5.0, return_adv=True)
+        
+        for address, (d, adv) in devices.items():
+            # Check if the device matches our naming convention
+            if d.name and d.name.startswith("MACHINE_"):
+                # Launch a new independent background task for this specific machine
+                asyncio.create_task(manage_device(d, adv.rssi))
+        
+        # Pause before the next scan to avoid saturating the Bluetooth adapter
+        await asyncio.sleep(10) 
+
+def run_ble_background():
+    """Sets up the asynchronous event loop for the BLE background thread."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(scan_loop())
+
 
 # ==========================================
-# ROUTES TO SERVE HTML FILES AND ASSETS
+# FLASK WEB ROUTES
 # ==========================================
+
 @app.route('/')
 def index():
-    return send_from_directory(os.getcwd(), 'diagnostic.html')
+    """Serves the main Augmented Reality page."""
+    return render_template('diagnostic.html')
 
 @app.route('/<path:filename>')
-def serve_files(filename):
-    return send_from_directory(os.getcwd(), filename)
+def serve_static(filename):
+    """
+    Serves static files like the 3D model (.glb) to the AR frontend.
+    Without this, A-Frame will freeze on a white screen waiting for assets.
+    """
+    return send_from_directory('.', filename)
+
+@app.route('/print/<int:marker_id>')
+def print_marker(marker_id):
+    """Generates a clean HTML page to display or print a specific barcode marker."""
+    img_url = f"https://raw.githubusercontent.com/nicolocarpignoli/artoolkit-barcode-markers-collection/master/4x4_bch_13_9_3/{marker_id}.png"
+    return f'<html><body style="display:flex;justify-content:center;align-items:center;height:100vh;margin:0;"><img src="{img_url}" style="width:15cm;"></body></html>'
+
+@app.route('/api/diagnostics/<device_id>')
+def get_diagnostics(device_id):
+    """API endpoint called by the AR frontend to fetch real-time data."""
+    data = REAL_TIME_DB.get(device_id)
+    if data:
+        return jsonify(data), 200
+    else:
+        return jsonify({"error": "Device Offline"}), 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    # 1. Start the Bluetooth scanner in a separate background thread
+    threading.Thread(target=run_ble_background, daemon=True).start()
+    
+    print("\n" + "="*60)
+    print("🚀 MULTI-DEVICE IOT GATEWAY ACTIVE")
+    print("="*60 + "\n")
+    
+    # 2. Start the Flask web server (Standard HTTP)
+    # NOTE: Run Ngrok in a separate terminal to expose this port to HTTPS!
+    app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)

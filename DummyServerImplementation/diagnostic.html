@@ -81,11 +81,7 @@
       renderer="antialias: true; logarithmicDepthBuffer: true; colorManagement: true;"
       arjs="sourceType: webcam; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 4x4_BCH_13_9_3;"
       vr-mode-ui="enabled: false">
-    
-    <a-assets>
-      <a-asset-item id="panel-model" src="the_tablet.glb"></a-asset-item>
-    </a-assets>
-
+  
     <a-entity camera id="arCamera"></a-entity>
   </a-scene>
 
@@ -99,29 +95,41 @@
           <a-marker type="barcode" value="${i}" diagnostic-tracker="deviceId: machine_${i}"
                     smooth="true" smoothCount="5" smoothTolerance="0.05" smoothThreshold="2">
             
+            <!-- MAIN ANIMATION WRAPPER -->
             <a-entity animation="property: scale; from: 0 0 0; to: 1 1 1; dur: 500; easing: easeOutElastic"
                       position="0 0.5 0" rotation="0 0 0">
               
+<!-- BILLBOARD WRAPPER -->
               <a-entity billboard>
                 
-                <a-gltf-model src="#panel-model" position="0 0 0" scale="0.4 0.4 0.4"></a-gltf-model>
-                
-                <a-entity position="0.5 0.2 0.4">
+                <!-- NEW SCALING WRAPPER -->
+                <!-- Change "0.6 0.6 0.6" to easily resize the entire UI together -->
+                <a-entity scale="0.6 0.6 0.6">
                   
-                  <a-text value="[ MACHINE ${i} DATA ]" position="-1.1 0.4 0.5" color="#00ffff" scale="0.35 0.35 0.35"></a-text>
-                  
-                  <a-circle class="status-dot" radius="0.03" position="-1.0 0.15 0.5" color="#95a5a6"></a-circle>
-                  <a-text class="status-text" value="STATUS: loading..." position="-0.9 0.15 0.5" color="#95a5a6" scale="0.3 0.3 0.3"></a-text>
-                  
-                  <a-text class="temp-text" value="Core Temp: loading..." position="-1.1 -0.05 0.5" color="#f1c40f" scale="0.3 0.3 0.3"></a-text>
-                  
-                  <a-text class="signal-text" value="BLE Signal: loading..." position="-1.1 -0.25 0.5" color="#ffffff" scale="0.3 0.3 0.3"></a-text>
-                  <a-text class="conn-text" value="Last Sync: loading..." position="-1.1 -0.45 0.5" color="#bdc3c7" scale="0.3 0.3 0.3"></a-text>
+                  <!-- 1. BACKGROUND GLASS -->
+                  <a-plane width="2.5" height="1.4" position="0 0.5 0" 
+                           material="shader: flat; color: #111111; transparent: true; opacity: 0.85; side: double; depthWrite: false">
+                  </a-plane>
+
+                  <!-- 2. TEXT GROUP -->
+                  <a-entity position="0 0.5 0.1">
+                    
+                    <a-text value="[ MACHINE ${i} DATA ]" position="-1.1 0.45 0" color="#00ffff" scale="0.25 0.25 0.25" alpha-test="0.5"></a-text>
+                    
+                    <a-circle class="status-dot" radius="0.02" position="-1.1 0.20 0" color="#95a5a6"></a-circle>
+                    <a-text class="status-text" value="STATUS: loading..." position="-1.0 0.20 0" color="#95a5a6" scale="0.20 0.20 0.20" alpha-test="0.5"></a-text>
+                    
+                    <a-text class="temp-text" value="Core Temp: loading..." position="-1.1 -0.05 0" color="#f1c40f" scale="0.20 0.20 0.20" alpha-test="0.5"></a-text>
+                    
+                    <a-text class="signal-text" value="BLE Signal: loading..." position="-1.1 -0.25 0" color="#ffffff" scale="0.20 0.20 0.20" alpha-test="0.5"></a-text>
+                    <a-text class="conn-text" value="Last Sync: loading..." position="-1.1 -0.45 0" color="#bdc3c7" scale="0.20 0.20 0.20" alpha-test="0.5"></a-text>
+                    
+                  </a-entity>
                   
                 </a-entity>
                 
-              </a-entity>
-              
+              </a-entity>              
+        
             </a-entity>
 
           </a-marker>

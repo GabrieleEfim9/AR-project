@@ -132,7 +132,7 @@ if __name__ == '__main__':
     threading.Thread(target=run_ble_background, daemon=True).start()
     
     print("\n" + "="*60)
-    print("🚀 MULTI-DEVICE IOT GATEWAY ACTIVE")
+    print("MULTI-DEVICE IOT GATEWAY ACTIVE")
     print("="*60 + "\n")
     
     # 2. Start the Flask web server (Standard HTTP)

@@ -102,33 +102,45 @@
 <!-- BILLBOARD WRAPPER -->
               <a-entity billboard>
                 
-                <!-- NEW SCALING WRAPPER -->
-                <!-- Change "0.6 0.6 0.6" to easily resize the entire UI together -->
                 <a-entity scale="0.6 0.6 0.6">
                   
-                  <!-- 1. BACKGROUND GLASS -->
-                  <a-plane width="2.5" height="1.4" position="0 0.5 0" 
-                           material="shader: flat; color: #111111; transparent: true; opacity: 0.85; side: double; depthWrite: false">
+                  <a-plane width="2.56" height="1.46" position="0 0.5 -0.005" 
+                           material="shader: flat; color: #3498db; transparent: true; opacity: 0.9; side: double; depthWrite: false">
                   </a-plane>
 
-                  <!-- 2. TEXT GROUP -->
-                  <a-entity position="0 0.5 0.1">
+                  <a-plane width="2.5" height="1.4" position="0 0.5 0" 
+                           material="shader: flat; color: #111111; transparent: true; opacity: 0.9; side: double; depthWrite: false">
+                  </a-plane>
+
+                  <a-entity position="0 0.5 0.05">
                     
-                    <a-text value="[ MACHINE ${i} DATA ]" position="-1.1 0.45 0" color="#00ffff" scale="0.25 0.25 0.25" alpha-test="0.5"></a-text>
+                    <a-text value="[ MACHINE ${i} DATA ]" position="-1.1 0.45 0" color="#00ffff" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
                     
-                    <a-circle class="status-dot" radius="0.02" position="-1.1 0.20 0" color="#95a5a6"></a-circle>
-                    <a-text class="status-text" value="STATUS: loading..." position="-1.0 0.20 0" color="#95a5a6" scale="0.20 0.20 0.20" alpha-test="0.5"></a-text>
+                    <a-circle class="status-dot" radius="0.025" position="-1.1 0.20 0" color="#95a5a6"></a-circle>
+                    <a-text class="status-text" value="STATUS: loading..." position="-0.95 0.20 0" color="#95a5a6" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
                     
-                    <a-text class="temp-text" value="Core Temp: loading..." position="-1.1 -0.05 0" color="#f1c40f" scale="0.20 0.20 0.20" alpha-test="0.5"></a-text>
+                    <a-entity position="-1.1 -0.05 0">
+                      <a-sphere radius="0.03" position="0 -0.015 0" color="#f1c40f"></a-sphere>
+                      <a-cylinder radius="0.016" height="0.08" position="0 0.01 0" color="#f1c40f"></a-cylinder>
+                    </a-entity>
+                    <a-text class="temp-text" value="Core Temp: loading..." position="-0.95 -0.05 0" color="#f1c40f" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
                     
-                    <a-text class="signal-text" value="BLE Signal: loading..." position="-1.1 -0.25 0" color="#ffffff" scale="0.20 0.20 0.20" alpha-test="0.5"></a-text>
-                    <a-text class="conn-text" value="Last Sync: loading..." position="-1.1 -0.45 0" color="#bdc3c7" scale="0.20 0.20 0.20" alpha-test="0.5"></a-text>
+                    <a-entity position="-1.1 -0.25 0">
+                      <a-plane width="0.01" height="0.015" position="-0.02 -0.0125 0" color="#ffffff"></a-plane>
+                      <a-plane width="0.01" height="0.025" position="0 -0.0075 0" color="#ffffff"></a-plane>
+                      <a-plane width="0.01" height="0.04" position="0.02 0 0" color="#ffffff"></a-plane>
+                    </a-entity>
+                    <a-text class="signal-text" value="BLE Signal: loading..." position="-0.95 -0.25 0" color="#ffffff" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
+                    
+                    <a-ring radius-inner="0.01" radius-outer="0.018" position="-1.1 -0.45 0" color="#bdc3c7" theta-length="280" 
+                            animation="property: rotation; to: 0 0 -360; loop: true; dur: 2000; easing: linear"></a-ring>
+                    <a-text class="conn-text" value="Last Sync: loading..." position="-0.95 -0.45 0" color="#bdc3c7" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
                     
                   </a-entity>
                   
                 </a-entity>
                 
-              </a-entity>              
+              </a-entity>             
         
             </a-entity>
 

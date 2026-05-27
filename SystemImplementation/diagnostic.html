@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  
+  <script>
+    // ==========================================
+    // COMPONENT 1: DATA TRACKER (API LOGIC)
+    // ==========================================
+    AFRAME.registerComponent('diagnostic-tracker', {
+      schema: { deviceId: {type: 'string'} },
+      init: function () {
+        this.interval = null;
+        
+        this.el.addEventListener('markerFound', () => {
+          this.fetchData(); 
+          this.interval = setInterval(() => this.fetchData(), 3000);
+        });
+        
+        this.el.addEventListener('markerLost', () => {
+          clearInterval(this.interval);
+        });
+      },
+      fetchData: async function () {
+        try {
+          const urlAPI = '/api/diagnostics/' + this.data.deviceId;
+          const answer = await fetch(urlAPI);
+          const data = await answer.json();
+
+          if(data.error) {
+             this.el.querySelector('.status-dot').setAttribute('color', '#e74c3c');
+             this.el.querySelector('.status-text').setAttribute('value', 'STATUS: OFFLINE');
+             this.el.querySelector('.status-text').setAttribute('color', '#e74c3c');
+             return; 
+          }
+
+          this.el.querySelector('.temp-text').setAttribute('value', 'Core Temp: ' + data.core_temperature + ' C');
+          this.el.querySelector('.signal-text').setAttribute('value', 'BLE Signal: ' + data.signal_level);
+          this.el.querySelector('.conn-text').setAttribute('value', 'Last Sync: ' + data.last_connection);
+
+          if (data.signal_level !== "No signal") {
+            this.el.querySelector('.status-dot').setAttribute('color', '#2ecc71'); 
+            this.el.querySelector('.status-text').setAttribute('value', 'STATUS: ONLINE');
+            this.el.querySelector('.status-text').setAttribute('color', '#2ecc71');
+          } else {
+            this.el.querySelector('.status-dot').setAttribute('color', '#e74c3c'); 
+            this.el.querySelector('.status-text').setAttribute('value', 'STATUS: OFFLINE');
+            this.el.querySelector('.status-text').setAttribute('color', '#e74c3c');
+          }
+
+        } catch (error) {
+          console.error("API Error:", error);
+        }
+      }
+    });
+
+    // ==========================================
+    // COMPONENT 2: CUSTOM BILLBOARD (LOOK-AT)
+    // ==========================================
+    // This custom component ensures the tablet always faces the user's camera safely.
+    AFRAME.registerComponent('billboard', {
+      init: function() {
+        this.target = new THREE.Vector3();
+      },
+      tick: function () {
+        if (this.el.sceneEl.camera) {
+          // Get the exact world position of the AR camera
+          this.el.sceneEl.camera.getWorldPosition(this.target);
+          // Rotate the 3D object to face the camera
+          this.el.object3D.lookAt(this.target);
+        }
+      }
+    });
+  </script>
+</head>
+
+<body style="margin: 0px; overflow: hidden;">
+
+  <a-scene embedded 
+      renderer="antialias: true; logarithmicDepthBuffer: true; colorManagement: true;"
+      arjs="sourceType: webcam; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 4x4_BCH_13_9_3;"
+      vr-mode-ui="enabled: false">
+  
+    <a-entity camera id="arCamera"></a-entity>
+  </a-scene>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const scene = document.querySelector('a-scene');
+      const numberOfMachines = 100; 
+
+      for (let i = 0; i < numberOfMachines; i++) {
+        const markerHTML = `
+          <a-marker type="barcode" value="${i}" diagnostic-tracker="deviceId: machine_${i}"
+                    smooth="true" smoothCount="5" smoothTolerance="0.05" smoothThreshold="2">
+            
+            <!-- MAIN ANIMATION WRAPPER -->
+            <a-entity animation="property: scale; from: 0 0 0; to: 1 1 1; dur: 500; easing: easeOutElastic"
+                      position="0 0.5 0" rotation="0 0 0">
+              
+<!-- BILLBOARD WRAPPER -->
+              <a-entity billboard>
+                
+                <a-entity scale="0.6 0.6 0.6">
+                  
+                  <a-plane width="2.56" height="1.46" position="0 0.5 -0.005" 
+                           material="shader: flat; color: #3498db; transparent: true; opacity: 0.9; side: double; depthWrite: false">
+                  </a-plane>
+
+                  <a-plane width="2.5" height="1.4" position="0 0.5 0" 
+                           material="shader: flat; color: #111111; transparent: true; opacity: 0.9; side: double; depthWrite: false">
+                  </a-plane>
+
+                  <a-entity position="0 0.5 0.05">
+                    
+                    <a-text value="[ MACHINE ${i} DATA ]" position="-1.1 0.45 0" color="#00ffff" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
+                    
+                    <a-circle class="status-dot" radius="0.025" position="-1.1 0.20 0" color="#95a5a6"></a-circle>
+                    <a-text class="status-text" value="STATUS: loading..." position="-0.95 0.20 0" color="#95a5a6" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
+                    
+                    <a-entity position="-1.1 -0.05 0">
+                      <a-sphere radius="0.03" position="0 -0.015 0" color="#f1c40f"></a-sphere>
+                      <a-cylinder radius="0.016" height="0.08" position="0 0.01 0" color="#f1c40f"></a-cylinder>
+                    </a-entity>
+                    <a-text class="temp-text" value="Core Temp: loading..." position="-0.95 -0.05 0" color="#f1c40f" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
+                    
+                    <a-entity position="-1.1 -0.25 0">
+                      <a-plane width="0.01" height="0.015" position="-0.02 -0.0125 0" color="#ffffff"></a-plane>
+                      <a-plane width="0.01" height="0.025" position="0 -0.0075 0" color="#ffffff"></a-plane>
+                      <a-plane width="0.01" height="0.04" position="0.02 0 0" color="#ffffff"></a-plane>
+                    </a-entity>
+                    <a-text class="signal-text" value="BLE Signal: loading..." position="-0.95 -0.25 0" color="#ffffff" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
+                    
+                    <a-ring radius-inner="0.01" radius-outer="0.018" position="-1.1 -0.45 0" color="#bdc3c7" theta-length="280" 
+                            animation="property: rotation; to: 0 0 -360; loop: true; dur: 2000; easing: linear"></a-ring>
+                    <a-text class="conn-text" value="Last Sync: loading..." position="-0.95 -0.45 0" color="#bdc3c7" scale="0.4 0.4 0.4" alpha-test="0.5"></a-text>
+                    
+                  </a-entity>
+                  
+                </a-entity>
+                
+              </a-entity>             
+        
+            </a-entity>
+
+          </a-marker>
+        `;
+        scene.insertAdjacentHTML('afterbegin', markerHTML);
+      }
+    });
+  </script>
+
+</body>
+</html>
